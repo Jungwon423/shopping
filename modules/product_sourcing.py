@@ -5,6 +5,9 @@ import os
 from openai import OpenAI
 from dotenv import load_dotenv
 
+# .env 파일을 로드합니다.
+load_dotenv()
+
 # OpenAI API 키 설정
 openai_api_key = os.getenv('OPENAI_API_KEY')
 
@@ -163,7 +166,7 @@ def translate_to_chinese(text):
 
 ############################################
 
-def get_top_selling_product_links(keywords) -> str:
+def get_top_selling_product_links(keywords) -> dict:
     """
     주어진 키워드로 검색된 상품들 중 많이 팔린 상품의 링크를 반환합니다.
 
@@ -256,8 +259,69 @@ def get_top_selling_product_links(keywords) -> str:
 
     return results
 
+############################################
+
+def filter_high_rating_products(product_dict, min_rating=4.7):
+    
+    high_rating_products = {category: [] for category in product_dict}
+    
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=False)
+        context = load_storage(browser)
+        page = context.new_page()
+        page.set_viewport_size({'width': 1920, 'height': 1080})
+        
+        for category, products in product_dict.items():
+            for product in products:
+                page.goto(product['href'])
+                
+                # 셀러의 평점을 가져옵니다.
+                rating_selectors = [
+                    ".ShopHeaderNew--starNum--2ws_MMR",
+                    ".OverallScore--starNum--2WdQduP",
+                    ".OverallScore--evaluateItemCore--X5zZj5q font"
+                ]
+                
+                rating = None
+                for selector in rating_selectors:
+                    try:
+                        print('평점 요소를 찾는 중...')
+                        print(f'평점 요소: {selector}')
+                        page.wait_for_selector(selector, timeout=3000)  # 요소가 로딩될 때까지 최대 3초간 기다림
+                        print('성공! 평점을 가져옵니다.')
+                        rating_element = page.query_selector(selector)
+                        if rating_element:
+                            rating_text = rating_element.inner_text()
+                            print('평점 텍스트: ', rating_text)
+                            try:
+                                rating = float(rating_text)
+                                print('평점 : ', rating_text)
+                                break
+                            except ValueError:
+                                continue
+                    except:
+                        continue
+                
+                if rating and rating >= min_rating:
+                    high_rating_products[category].append(product)
+                
+        # 쿠키 및 로컬 스토리지 저장
+        save_storage(context, 'storage_state.json')
+
+        # 브라우저 종료
+        browser.close()
+    
+    
+    return high_rating_products
+    
+############################################
+# 이하 코드는 테스트 코드입니다.
+
 results = get_top_selling_product_links(['야외용 선풍기', '휴대용 선풍기', '캠핑용 텐트'])
+
+filtered_results = filter_high_rating_products(results)
 
 # results 딕셔너리를 JSON 파일에 저장 (테스트용)
 with open("results.json", "w", encoding="utf-8") as f:
     json.dump(results, f, ensure_ascii=False, indent=4)
+    json.dump(filtered_results, f, ensure_ascii=False, indent=4)

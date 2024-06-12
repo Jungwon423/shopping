@@ -204,11 +204,11 @@ def get_top_selling_product_links(keywords) -> dict:
         
         try:
             page.fill(search_input_selector, translated_keywords[0])
-            print('키워드를 입력했습니다.')
+            print('1번째 키워드를 입력했습니다.')
             page.click(search_button_selector)
             print('검색 버튼을 클릭했습니다.')
         except:
-            print('첫번째 키워드를 입력하는 도중 오류가 발생했습니다.')
+            print('1번째 키워드를 입력하는 도중 오류가 발생했습니다.')
         
         # 첫번째 키워드 검색 결과 페이지 로드 대기
         product_link_selector = 'a.Card--doubleCardWrapper--L2XFE73'
@@ -285,17 +285,12 @@ def filter_high_rating_products(product_dict, min_rating=4.7):
                 rating = None
                 for selector in rating_selectors:
                     try:
-                        print('평점 요소를 찾는 중...')
-                        print(f'평점 요소: {selector}')
                         page.wait_for_selector(selector, timeout=3000)  # 요소가 로딩될 때까지 최대 3초간 기다림
-                        print('성공! 평점을 가져옵니다.')
                         rating_element = page.query_selector(selector)
                         if rating_element:
                             rating_text = rating_element.inner_text()
-                            print('평점 텍스트: ', rating_text)
                             try:
                                 rating = float(rating_text)
-                                print('평점 : ', rating_text)
                                 break
                             except ValueError:
                                 continue
@@ -310,6 +305,10 @@ def filter_high_rating_products(product_dict, min_rating=4.7):
 
         # 브라우저 종료
         browser.close()
+        
+        # 각 카테고리별로 제품을 3개 이하로 제한합니다.
+        for category in high_rating_products:
+            high_rating_products[category] = high_rating_products[category][:10]
     
     
     return high_rating_products
@@ -317,11 +316,27 @@ def filter_high_rating_products(product_dict, min_rating=4.7):
 ############################################
 # 이하 코드는 테스트 코드입니다.
 
-results = get_top_selling_product_links(['야외용 선풍기', '휴대용 선풍기', '캠핑용 텐트'])
+keywords = [
+    "미용실의자",
+    "트롤리 책장",
+    "일체형 스키복",
+    "미니 원피스",
+    "미용사 앞치마",
+    "우드 건조대",
+    "비파괴스캐너",
+    "명상 의자",
+    "캠핑용 실링팬",
+    "고양이집"
+]
+
+
+results = get_top_selling_product_links(keywords)
 
 filtered_results = filter_high_rating_products(results)
 
 # results 딕셔너리를 JSON 파일에 저장 (테스트용)
 with open("results.json", "w", encoding="utf-8") as f:
     json.dump(results, f, ensure_ascii=False, indent=4)
+    
+with open("filtered_results.json", "w", encoding="utf-8") as f:
     json.dump(filtered_results, f, ensure_ascii=False, indent=4)

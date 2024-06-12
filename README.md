@@ -33,7 +33,7 @@ shopping/
 - 아마존 멕시코 ()
 - 아마존 인도 ()
 
-==> 상품 URL의 List 반환
+==> 상품 URL의 List 반환 ✅
 
 2. (상품 URL이 주어졌을 때)
 1) URL에 접속하여 상품 정보 Crawling

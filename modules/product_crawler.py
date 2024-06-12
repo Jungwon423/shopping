@@ -177,7 +177,8 @@ def get_product_info(product_link):
             "detail_image_urls": detail_image_urls
         }
 
-        product_info_dir = os.path.join("images", product_id)
+        # TODO: 실제 user_id를 사용하여 저장 경로를 생성합니다.
+        product_info_dir = os.path.join("images", 'test', product_id)
         os.makedirs(product_info_dir, exist_ok=True)
 
         save_to_json(product_info, os.path.join(product_info_dir, "product_info.json"))

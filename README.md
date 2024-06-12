@@ -1,3 +1,11 @@
+# 가상환경 실행방법
+
+venv\Scripts\activate (Windows)
+
+# 라이브러리 텍스트에 저장
+
+pip freeze > requirements.txt
+
 # shopping
 
 프로젝트 구조
@@ -7,14 +15,15 @@ shopping/
 ├── requirements.txt
 ├── venv/
 └── api/
-    ├── stt.py
-    ├── gmail_module.py
-    ├── calendar_module.py
-    └── llm_controller.py
+├── stt.py
+├── gmail_module.py
+├── calendar_module.py
+└── llm_controller.py
 
 # Application Workflow
 
 1. 상품 소싱
+
 - 타오바오 (✅)
 - 티몰 ()
 - 1688 ()
@@ -36,7 +45,9 @@ shopping/
 ==> 상품 URL의 List 반환 ✅
 
 2. (상품 URL이 주어졌을 때)
+
 1) URL에 접속하여 상품 정보 Crawling
+
 - 상품 정보 (상품명) ✅
 - 상품 이미지 및 동영상
 - 옵션 ✅
@@ -44,7 +55,8 @@ shopping/
 - 상품 속성 ✅
 - 상세페이지의 이미지 저장 ✅
 
-2) Crawling한 상품 정보 처리
+2. Crawling한 상품 정보 처리
+
 - 상품 정보 (상품명 -> 상품 카테고리 & 상품 태그) ✅
 - 상품 이미지 및 동영상 (원본 -> 마켓별 권장 크기로 리사이징) ✅
 - 옵션 (원본 -> 마켓 지침에 맞게 수정) ✅
@@ -52,7 +64,8 @@ shopping/
 - 상품 속성 (원본 -> 마켓 지침에 맞게 수정) ✅
 - 상세페이지 (외국어 번역)
 
-3) 상품 업로드
+3. 상품 업로드
+
 - 스마트스토어 (✅)
 - 쿠팡 ()
 - 11번가 글로벌 ()

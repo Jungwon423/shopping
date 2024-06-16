@@ -34,7 +34,6 @@ def load_storage(browser, path='storage_state.json'):
     Returns:
     새로운 브라우저 컨텍스트
     """
-    
     # 파일이 존재하지 않으면 빈 저장 상태로 파일 생성
     if not os.path.exists(path):
         empty_storage = {
@@ -66,11 +65,13 @@ def parse_chinese_number(string):
         '亿': 100000000
     }
     
+    # 숫자와 단위를 매칭하는 정규 표현식
     match = re.search(r'(\d+)([千万亿]?)', string)
     
     if not match:
         return 0
 
+    # 매칭된 숫자와 단위를 정수로 변환
     number = int(match.group(1))
     unit = match.group(2)
     
@@ -97,6 +98,15 @@ def ensure_https(url):
     return url
 
 def select_top_3_selling_products(product_links) -> list:
+    """
+    주어진 상품 링크들 중 상위 3개의 판매 상품을 선택합니다.
+
+    Parameters:
+    product_links: 상품 링크 요소들의 리스트
+
+    Returns:
+    list: 상위 3개의 판매 상품 리스트
+    """
     candidate_products = []
 
     for product_link in product_links:
@@ -142,7 +152,7 @@ def translate_to_chinese(text):
     Returns:
     str: 중국어 번역된 텍스트
     """
-    
+    # OpenAI 클라이언트 초기화
     client = OpenAI(api_key=openai_api_key)
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -262,7 +272,16 @@ def get_top_selling_product_links(keywords) -> dict:
 ############################################
 
 def filter_high_rating_products(product_dict, min_rating=4.7):
-    
+    """
+    주어진 상품 딕셔너리에서 최소 평점 이상의 상품을 필터링하여 반환합니다.
+
+    Parameters:
+    product_dict (dict): 각 키워드에 대한 상위 판매 상품 딕셔너리
+    min_rating (float): 필터링할 최소 평점 (기본값은 4.7)
+
+    Returns:
+    dict: 최소 평점 이상의 상품으로 구성된 딕셔너리
+    """
     high_rating_products = {category: [] for category in product_dict}
     
     with sync_playwright() as playwright:
@@ -310,7 +329,6 @@ def filter_high_rating_products(product_dict, min_rating=4.7):
         for category in high_rating_products:
             high_rating_products[category] = high_rating_products[category][:10]
     
-    
     return high_rating_products
     
 ############################################
@@ -329,9 +347,10 @@ keywords = [
     "고양이집"
 ]
 
-
+# 키워드로 상위 판매 상품 링크 가져오기
 results = get_top_selling_product_links(keywords)
 
+# 최소 평점 이상의 상품 필터링
 filtered_results = filter_high_rating_products(results)
 
 # results 딕셔너리를 JSON 파일에 저장 (테스트용)

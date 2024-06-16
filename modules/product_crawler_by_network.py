@@ -66,10 +66,12 @@ def load_from_json(filename='network_responses.json'):
     return data
 
 def parse_jsonp(jsonp_str):
-    # 'mtopjsonp1('와 마지막 ')'를 제거
+    # 'mtopjsonp' 뒤의 숫자와 '('를 제거하고 마지막 ')'를 제거
     jsonp_str = jsonp_str.strip()
-    if jsonp_str.startswith("mtopjsonp1(") and jsonp_str.endswith(")"):
-        jsonp_str = jsonp_str[len("mtopjsonp1("):-1]
+    pattern = r'^mtopjsonp\d+\('
+    match = re.match(pattern, jsonp_str)
+    if match:
+        jsonp_str = jsonp_str[match.end():-1]
         try:
             return json.loads(jsonp_str)
         except json.JSONDecodeError as e:
@@ -154,88 +156,53 @@ def parse_sku_data(json_data):
         result.append(sku_data)
     return result
 
-################################################################
-
-def get_product_info(product_link):
-    """
-    주어진 제품 링크에서 제품 정보를 추출합니다.
-
-    Parameters:
-    product_link (str): 제품 페이지의 URL
-
-    Returns:
-    str: 추출된 제품 정보
-    """
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
-        context = load_storage(browser)
-        page = context.new_page()
-        page.set_viewport_size({'width': 1920, 'height': 1080})
-
-        response_data = {}
+def parse_sku_data_to_options(json_data):
+    data = json.loads(json_data)
+    result = {
+        "optionCombinationGroupNames": {},
+        "optionCombinations": []
+    }
+    
+    props = data['skuBase']['props']
+    skus_info = data['skuCore']['sku2info']
+    skus_properties = data['skuBase']['skus']
+    
+    # Mapping option group names
+    for index, prop in enumerate(props):
+        result['optionCombinationGroupNames'][f'optionGroupName{index + 1}'] = prop['name']
+    
+    # Extracting sku details and options
+    for sku_property in skus_properties:
+        sku_id = sku_property['skuId']
+        sku_info = skus_info[sku_id]
+        price = int(sku_info['price']['priceMoney'])
+        stock_quantity = int(sku_info['quantity'])
         
-        def handle_response(response):
-            if response.status == 200 and 'mtop.taobao.pcdetail.data.get' in response.url:
-                response_data['product_info'] = response.json()
-            elif response.status == 200 and 'mtop.taobao.detail.getdesc' in response.url:
-                jsonp_str = response.text()
-                print(jsonp_str)
-                response_data['product_description'] = parse_jsonp(jsonp_str)
-                print(parse_jsonp(jsonp_str))
-                print(response_data['product_description'])
-
-        # 네트워크 응답 이벤트를 캡처합니다.
-        page.on('response', handle_response)
-
-        # 제품 링크 열기
-        page.goto(product_link)
+        # Splitting propPath and extracting option values
+        prop_path = sku_property['propPath'].split(';')
+        options = {}
+        for prop in prop_path:
+            prop_id, val_id = prop.split(':')
+            for prop_item in props:
+                if prop_item['pid'] == prop_id:
+                    for val in prop_item['values']:
+                        if val['vid'] == val_id:
+                            options[prop_item['name']] = val['name']
         
-        # 특정 네트워크 응답을 기다림      
-        with page.expect_response(
-            lambda response: "mtop.taobao.pcdetail.data.get" in response.url
-        ) as response_info:
-            response = ''
-
-        with page.expect_response(
-            lambda response: "mtop.taobao.detail.getdesc" in response.url
-        ) as response_info:
-            response = ''
-        
-        time.sleep(3 + random.random()*3)
-        
-        save_to_json(response_data['product_info'], 'network_product_info.json')
-        save_to_json(response_data['product_description'], 'network_product_description.json')
-        
-        product_info_json = response_data['product_info']['data']
-        product_description_json = response_data['product_description']
-        
-        actual_product_link = page.url
-        product_id = get_product_id(actual_product_link)
-        product_name = product_info_json['item']['title']
-        thumbnail_urls = product_info_json['item']['images']
-        product_option = []
-        product_properties = product_info_json['componentsVO']['extensionInfoVO']['infos']
-        detail_image_urls = extract_image_links_from_html(product_description_json['data']['components']['componentData']['desc_richtext_pc']['model']['text'])
-        
-        # 제품 정보를 JSON 파일로 저장
-        product_info = {
-            "product_id": product_id,
-            "product_name": product_name,
-            "thumbnail_urls": thumbnail_urls,
-            "product_options": product_option,
-            "product_properties": product_properties,
-            "detail_image_urls": detail_image_urls
+        option_combination = {
+            "id": sku_id,
+            "optionName1": options.get(props[0]['name'], ""),
+            "optionName2": options.get(props[1]['name'], ""),
+            "optionName3": options.get(props[2]['name'], "") if len(props) > 2 else "",
+            "optionName4": options.get(props[3]['name'], "") if len(props) > 3 else "",
+            "stockQuantity": stock_quantity,
+            "price": price,
+            "sellerManagerCode": "",
+            "usable": True
         }
-
-        # TODO: 실제 user_id를 사용하여 저장 경로를 생성합니다.
-        product_info_dir = os.path.join("images", 'test', product_id)
-        os.makedirs(product_info_dir, exist_ok=True)
-
-        save_to_json(product_info, os.path.join(product_info_dir, "product_info.json"))
-        
-        # 쿠키 및 로컬 스토리지 저장
-        save_storage(context, 'storage_state.json')
-        browser.close()
+        result['optionCombinations'].append(option_combination)
+    
+    return result
 
 def get_product_id(product_link):
     """
@@ -260,244 +227,96 @@ def get_product_id(product_link):
     
     return product_id
 
-# get_product_info("https://item.taobao.com/item.htm?priceTId=2100c80717182171949451856e0c31&id=576815286685&ns=1&abbucket=6#detail")
+################################################################
 
-# JSON 데이터 (여기에 JSON 데이터를 삽입합니다)
-json_data = """
-{
-    "skuCore": {
-            "sku2info": {
-                "0": {
-                    "logisticsTime": "付款后10天内发货",
-                    "moreQuantity": "true",
-                    "price": {
-                        "priceActionText": "",
-                        "priceActionType": "buy_in_mobile",
-                        "priceMoney": "45000",
-                        "priceText": "450-1080"
-                    },
-                    "quantity": "200",
-                    "quantityText": "有货"
-                },
-                "4976877232879": {
-                    "cartParam": {
-                        "addCartCheck": "true"
-                    },
-                    "logisticsTime": "付款后10天内发货",
-                    "moreQuantity": "true",
-                    "price": {
-                        "priceActionText": "",
-                        "priceActionType": "buy_in_mobile",
-                        "priceMoney": "78000",
-                        "priceText": "780"
-                    },
-                    "quantity": "200",
-                    "quantityText": "有货"
-                },
-                "4976877232881": {
-                    "cartParam": {
-                        "addCartCheck": "true"
-                    },
-                    "logisticsTime": "付款后10天内发货",
-                    "moreQuantity": "true",
-                    "price": {
-                        "priceActionText": "",
-                        "priceActionType": "buy_in_mobile",
-                        "priceMoney": "45000",
-                        "priceText": "450"
-                    },
-                    "quantity": "200",
-                    "quantityText": "有货"
-                },
-                "4715115274405": {
-                    "cartParam": {
-                        "addCartCheck": "true"
-                    },
-                    "logisticsTime": "付款后10天内发货",
-                    "moreQuantity": "true",
-                    "price": {
-                        "priceActionText": "",
-                        "priceActionType": "buy_in_mobile",
-                        "priceMoney": "108000",
-                        "priceText": "1080"
-                    },
-                    "quantity": "200",
-                    "quantityText": "有货"
-                },
-                "4976877232880": {
-                    "cartParam": {
-                        "addCartCheck": "true"
-                    },
-                    "logisticsTime": "付款后10天内发货",
-                    "moreQuantity": "true",
-                    "price": {
-                        "priceActionText": "",
-                        "priceActionType": "buy_in_mobile",
-                        "priceMoney": "55000",
-                        "priceText": "550"
-                    },
-                    "quantity": "200",
-                    "quantityText": "有货"
-                },
-                "4716213653677": {
-                    "cartParam": {
-                        "addCartCheck": "true"
-                    },
-                    "logisticsTime": "付款后10天内发货",
-                    "moreQuantity": "true",
-                    "price": {
-                        "priceActionText": "",
-                        "priceActionType": "buy_in_mobile",
-                        "priceMoney": "58000",
-                        "priceText": "580"
-                    },
-                    "quantity": "200",
-                    "quantityText": "有货"
-                },
-                "4225472291946": {
-                    "cartParam": {
-                        "addCartCheck": "true"
-                    },
-                    "logisticsTime": "付款后10天内发货",
-                    "moreQuantity": "true",
-                    "price": {
-                        "priceActionText": "",
-                        "priceActionType": "buy_in_mobile",
-                        "priceMoney": "69000",
-                        "priceText": "690"
-                    },
-                    "quantity": "200",
-                    "quantityText": "有货"
-                },
-                "4869442741318": {
-                    "cartParam": {
-                        "addCartCheck": "true"
-                    },
-                    "logisticsTime": "付款后10天内发货",
-                    "moreQuantity": "true",
-                    "price": {
-                        "priceActionText": "",
-                        "priceActionType": "buy_in_mobile",
-                        "priceMoney": "58000",
-                        "priceText": "580"
-                    },
-                    "quantity": "200",
-                    "quantityText": "有货"
-                }
-            },
-            "skuItem": {
-                "itemStatus": "0",
-                "renderSku": "true",
-                "unitBuy": "1"
+def get_product_info(product_links):
+    """
+    주어진 제품 링크에서 제품 정보를 추출합니다.
+
+    Parameters:
+    product_link (str): 제품 페이지의 URL
+
+    Returns:
+    str: 추출된 제품 정보
+    """
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=False)
+        context = load_storage(browser)
+        page = context.new_page()
+        page.set_viewport_size({'width': 1920, 'height': 1080})
+
+        global response_product_info
+        global response_product_description
+        
+        def handle_response(response):
+            global response_product_info
+            global response_product_description
+            if response.status == 200 and 'mtop.taobao.pcdetail.data.get' in response.url:
+                print(f"Response URL: {response.json()}")
+                response_product_info = response.json()
+            elif response.status == 200 and 'mtop.taobao.detail.getdesc' in response.url:
+                print('@@@@@@@@@')
+                print(f"Response URL: {response.text()}")
+                jsonp_str = response.text()
+                response_product_description = parse_jsonp(jsonp_str)
+
+        # 네트워크 응답 이벤트를 캡처합니다.
+        page.on('response', handle_response)
+        
+        for product_link in product_links:
+            # 제품 링크 열기
+            page.goto(product_link)
+            
+            # 로그인 팝업 끄기
+            try:
+                page.wait_for_selector('.baxia-dialog-close', timeout=3000)
+                page.click('.baxia-dialog-close')
+            except TimeoutError:
+                # 셀렉터가 나타나지 않으면 아무 작업도 하지 않음
+                pass
+            
+            # 특정 네트워크 응답을 기다림      
+            with page.expect_response(
+                lambda response: "mtop.taobao.pcdetail.data.get" in response.url
+            ) as response_info:
+                response = ''
+
+            with page.expect_response(
+                lambda response: "mtop.taobao.detail.getdesc" in response.url
+            ) as response_info:
+                response = ''
+            
+            time.sleep(3 + random.random()*3)
+            
+            product_info_json = response_product_info['data']
+            product_description_json = response_product_description
+            
+            actual_product_link = page.url
+            product_id = get_product_id(actual_product_link)
+            product_name = product_info_json['item']['title']
+            thumbnail_urls = product_info_json['item']['images']
+            product_option = parse_sku_data_to_options(product_description_json)
+            product_properties = product_info_json['componentsVO']['extensionInfoVO']['infos']
+            detail_image_urls = extract_image_links_from_html(product_description_json['data']['components']['componentData']['desc_richtext_pc']['model']['text'])
+            
+            # 제품 정보를 JSON 파일로 저장
+            product_info = {
+                "product_id": product_id, # taobao product ID
+                "product_name": product_name, # name
+                "thumbnail_urls": thumbnail_urls,
+                "product_options": product_option,
+                "product_properties": product_properties,
+                "detail_image_urls": detail_image_urls # images
             }
-        },
-    "skuBase": {
-            "components": [],
-            "props": [
-                {
-                    "hasImage": "true",
-                    "name": "颜色分类",
-                    "nameDesc": "（7）",
-                    "pid": "1627207",
-                    "values": [
-                        {
-                            "image": "https://gw.alicdn.com/bao/uploaded/i1/344550392/O1CN015HLm661Ela8t2z4lW_!!344550392.jpg",
-                            "name": "款式一矮靠背大底盘",
-                            "sortOrder": "0",
-                            "vid": "27794997203"
-                        },
-                        {
-                            "image": "https://gw.alicdn.com/bao/uploaded/i3/344550392/O1CN01FheqIj1Ela8wUMBww_!!344550392.jpg",
-                            "name": "美发镜台",
-                            "sortOrder": "2",
-                            "vid": "14256905"
-                        },
-                        {
-                            "image": "https://gw.alicdn.com/bao/uploaded/i4/344550392/O1CN01bsiMFb1Ela5IakATP_!!344550392.jpg",
-                            "name": "款式二不锈钢底盘双杆脚踏",
-                            "sortOrder": "3",
-                            "vid": "27794997204"
-                        },
-                        {
-                            "image": "https://gw.alicdn.com/bao/uploaded/i1/344550392/O1CN01nMPRJj1Ela5G3hvM3_!!344550392.jpg",
-                            "name": "款式二不锈钢底盘单杆脚踏",
-                            "sortOrder": "4",
-                            "vid": "27794997205"
-                        },
-                        {
-                            "image": "https://gw.alicdn.com/bao/uploaded/i2/344550392/O1CN01i89g0Y1Ela5B1l9xa_!!344550392.jpg",
-                            "name": "款式三不锈钢底盘u型脚踏",
-                            "sortOrder": "5",
-                            "vid": "24069526118"
-                        },
-                        {
-                            "image": "https://gw.alicdn.com/bao/uploaded/i4/344550392/O1CN01EM1RSF1Ela51nI8LY_!!344550392.jpg",
-                            "name": "款式二黑色底盘",
-                            "sortOrder": "6",
-                            "vid": "26751570850"
-                        },
-                        {
-                            "image": "https://gw.alicdn.com/bao/uploaded/i1/344550392/O1CN01cQKPrg1Ela0saLK0Q_!!344550392.jpg",
-                            "name": "款式四",
-                            "sortOrder": "7",
-                            "vid": "5552051"
-                        }
-                    ]
-                },
-                {
-                    "hasImage": "false",
-                    "name": "套餐类型",
-                    "pid": "5919063",
-                    "values": [
-                        {
-                            "name": "官方标配",
-                            "sortOrder": "1",
-                            "vid": "6536025"
-                        }
-                    ]
-                }
-            ],
-            "skus": [
-                {
-                    "propPath": "1627207:27794997203;5919063:6536025",
-                    "skuId": "4225472291946"
-                },
-                {
-                    "propPath": "1627207:14256905;5919063:6536025",
-                    "skuId": "4715115274405"
-                },
-                {
-                    "propPath": "1627207:27794997204;5919063:6536025",
-                    "skuId": "4716213653677"
-                },
-                {
-                    "propPath": "1627207:27794997205;5919063:6536025",
-                    "skuId": "4869442741318"
-                },
-                {
-                    "propPath": "1627207:24069526118;5919063:6536025",
-                    "skuId": "4976877232879"
-                },
-                {
-                    "propPath": "1627207:26751570850;5919063:6536025",
-                    "skuId": "4976877232880"
-                },
-                {
-                    "propPath": "1627207:5552051;5919063:6536025",
-                    "skuId": "4976877232881"
-                }
-            ]
-        }
-}
-"""
 
-# 함수 호출 및 결과 출력
-result = parse_sku_data(json_data)
-for item in result:
-    print(f"SKU ID: {item['sku_id']}")
-    print(f"Price: {item['price']}")
-    for option in item['options']:
-        print(f"Option: {option['name']}")
-        if option['image']:
-            print(f"Image: {option['image']}")
-    print("-----")
+            # TODO: 실제 user_id를 사용하여 저장 경로를 생성합니다.
+            product_info_dir = os.path.join("images", 'test', product_id)
+            os.makedirs(product_info_dir, exist_ok=True)
+
+            save_to_json(product_info, os.path.join(product_info_dir, "product_info.json"))
+        
+        # 쿠키 및 로컬 스토리지 저장
+        save_storage(context, 'storage_state.json')
+        browser.close()
+
+get_product_info(["https://click.simba.taobao.com/cc_im?p=%C3%C0%C8%DD%C9%B3%C1%FA%D2%CE&s=1179920772&k=1549&e=MiHjIFDBKE6Dzf%2FvITO7sEZmLfqffUJeXjqNsSnrLV9lUd1Vq2tWy7oMOwWssTWQ07wOSSJWEfuKPnWyyGNr3x977EgpOixF09x%2BHZac%2BWA1mPkbBSlcKgR94erwJwidH1dovqwCAnLsPk33hZ7F1mN6FIQ9PZWnduUwk9AF0bcmof0KrXLpyqEt65sK%2FmY3TPnbPfS7k44sTBvquacd%2FsAd9yQ%2FZmMXFBZN6aRXE2kydiFfNuW%2BrCpxkFzvWX2sNZBrIQr16fUirfRmSc8XSna15O8ifaQHOpiYACmp7JeKIkl5WRNdM9LmJ1k8HY9YlTEjbJDiZ91%2Bdo5PIIjLxB7L5jThhRlV%2BqZUTaSfopvJqIbbjtP3ujJaBbP8Z0CzpM1TEmkg0FnVK0Pj9b0IfsCBhYqJZ%2BSxOQ1e3CmBWQWyacRRtnM52ziZqMLxrxPZwGJoh8jUfZAJaDYoVwABaTJlaJyTu%2FNnbTQJ5Jlx0Iwm9QCgFUfF6mJs%2B8NYZGSzo%2FJXgONmdylIF3Flw2CQpy%2BUH%2F%2FA5X4HVwGlKOVi0x2hHClDNzXoHKcpuO7g7IU0q1%2Fo%2FnaIIthiJ%2FfG%2B1fx2dzYVNcbY7YbKVZOC7mG74lmXmli3fCriT9z6PaimQdhXs9nITR5ti6lXr1XU4beOWEJprHuE5QfJdhSxNbJWMTS%2FAwFLht78wUrs5F1BwCRe4yRmHvnzW0uOsthIZB5ckkUP5Jnl%2F1G1JgEzoPUFo6Q38vsKo6L%2FKfX0uTrwJzcqOVOMq5ygu5%2BiVoL%2F7IaS2uIODJ%2BFXBxx5vklnSRWWx4jaLf1rfv4Bwf4YDRKXw7GrGhdNBKVHpDksBn8lrd%2Fvg4j5%2Bj8WdImQZrUXyLodne%2BWNHIPp4qyOjakjKOYuKQHi8vySCI6TmgeIkSchCHj1veAdbRD8VZtKlnfsn27Uci1tGLFCL6bHm1VRtHTpYQy1F6%2FtyeiyxalesylsFNAp0eTKV8BTDjApK2VAHPn39nYJhfDf8mCI6bXobhgECiD5bds0411lUlpcv7qUT5pb%2FNmBLlNfXNvIfRRaZzimELXVW6Hz6EIXsBxeQKJb%2F60C7SIZW5nUKFqGqLhhYf2nF1pqOXITDHjgySh6Imnr8j0yCLLCzcm0BYZbVFIbVfErnPmyrZC85DV7cKYFZBeW1a%2BV4ez7ZE2r%2Bw3V%2Ffcjd9RjMJ0vwHufELjGENhoR6pgHV1ABypxq31JyixvKY1BEwS0u4%2BfFDIUHp9IfU4nM9vQneUEaHxp0Itix2iiCDu8o5DEi7TpBM3SUiqqr9ak8ENdvElb81%2FcItDY8U8YDMXfBcYPJRfTfc9kh39L885DS%2BVCqOFI5DHyMtwmFb8mohtuO0%2Fe6HwmwOwtUIU1LpZGlJRHB1Qw392PkEhgJeaLV3h2YuB8JO%2BholEkEvzh9yZGW%2FKnc5DAF2EnaZYtXAaUo5WLTHdu3RZ0zFIoJTMI8hNv3ZhezPeAUvb7cLu1PyjTVj8XnkanyLQvAEzMUtxL46nh9htvH73IvQ%2BA9SyeUqQxxVys%3D#detail", "https://item.taobao.com/item.htm?id=576815286685&ns=1&abbucket=6#detail"])

@@ -13,7 +13,7 @@ def create_product_payload(product):
             "deliveryInfo" : {
                 "deliveryType" : "DELIVERY",
                 "deliveryAttributeType" : "NORMAL",
-                "deliveryCompany" : "", # TODO: 배대지에서 입력받은 배송사를 입력
+                "deliveryCompany" : "CJGLS", # TODO: 배대지에서 입력받은 배송사를 입력
                 "deliveryFee" : {
                     "deliveryFeeType" : "FREE",
                     "deliveryFeePayType" : "PREPAID",

@@ -110,12 +110,11 @@ def select_category_with_gpt4o(product_name, nearest_categories):
     Returns:
         str: 선택된 카테고리.
     """
-    openAI_key = 'sk-proj-rVcRe7XXZkHljpSOyD2nT3BlbkFJH0WRscMUcBEnjGQcnXmf'
     
     guide = "You're an ecommerce business whose job is to determine which product category a product belongs to when given a product name. Given a product name and a set of candidate category names, you need to find the most accurate category that product name belongs to."
     prompt = "Given the product name and the following candidate categories, determine which category the product belongs to.\n\nProduct name: " + product_name + "\n\nCandidate categories:\n" + "\n".join(nearest_categories[0]) + "\n\nWhich category does the product belong to? Respond in the following JSON format:\n\n{\n  \"category\": \"Category name\"\n}\n !IMPORT : Do not include any other text other than the category name in the JSON response."
     
-    client = OpenAI(api_key=openAI_key)
+    client = OpenAI(api_key=openai_api_key)
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[

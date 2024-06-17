@@ -1,5 +1,5 @@
 from modules.product_sourcing_by_network import get_top_selling_product_links, filter_high_rating_products
-from modules.product_crawler_by_network import get_product_info
+from modules.deprecated.product_crawler_by_network import get_product_info
 
 def run_automation():
     

@@ -1,6 +1,8 @@
 # 가상환경 실행방법
 
 venv\Scripts\activate (Windows)
+(파이썬 버전 3.10.10)
+--> chromaDB 쓰려면 3.10 이하 버전 써야 함
 
 # 라이브러리 텍스트에 저장
 

@@ -36,7 +36,6 @@ def load_storage(browser, path='storage_state.json'):
     Returns:
     새로운 브라우저 컨텍스트
     """
-    
     # 파일이 존재하지 않으면 빈 저장 상태로 파일 생성
     if not os.path.exists(path):
         empty_storage = {
@@ -99,11 +98,18 @@ def ensure_https(url):
     return url
 
 def sort_products_by_sales(simple_product_info) -> list:
+    """
+    판매량 기준으로 제품을 정렬합니다.
+
+    Parameters:
+    simple_product_info (dict): 제품 정보가 포함된 딕셔너리
+
+    Returns:
+    list: 판매량 순으로 정렬된 제품 리스트
+    """
     candidate_products = []
 
     for product_info in simple_product_info['data']['itemsArray']:
-        
-        # 데이터 저장
         product = {
             "href": ensure_https(product_info['auctionURL']),
             "title": product_info['title'],
@@ -130,12 +136,11 @@ def translate_to_chinese(text):
     Returns:
     str: 중국어 번역된 텍스트
     """
-    
     client = OpenAI(api_key=openai_api_key)
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
-            {"role": "system", "content": "You are a translator working for Immacus and your job is to translate product search keywords given in Korean into Chinese.  Given the Korean keywords you need to translate, translate them into Chinese in the following JSON format. {“translated_text”: “Your translation into Chinese”}"},
+            {"role": "system", "content": "You are a translator working for Immacus and your job is to translate product search keywords given in Korean into Chinese. Given the Korean keywords you need to translate, translate them into Chinese in the following JSON format. {“translated_text”: “Your translation into Chinese”}"},
             {"role": "user", "content": text}
         ]
     )
@@ -146,14 +151,21 @@ def translate_to_chinese(text):
     
     # JSON 형식의 문자열을 파싱
     response_json = json.loads(response_text)
-    
     translated_text = response_json["translated_text"]
     print(f'번역 결과: {translated_text}')
     
     return translated_text
 
 def parse_jsonp(jsonp_str):
-    # 'mtopjsonp' 뒤의 숫자와 '('를 제거하고 마지막 ')'를 제거
+    """
+    JSONP 문자열을 JSON 객체로 변환합니다.
+
+    Parameters:
+    jsonp_str (str): JSONP 문자열
+
+    Returns:
+    dict: JSON 객체
+    """
     jsonp_str = jsonp_str.strip()
     pattern = r'^mtopjsonp\d+\('
     match = re.match(pattern, jsonp_str)
@@ -165,8 +177,6 @@ def parse_jsonp(jsonp_str):
             print(f"JSON decoding failed: {e}")
     return None
 
-############################################
-
 def get_top_selling_product_links(keywords) -> dict:
     """
     주어진 키워드로 검색된 상품들 중 많이 팔린 상품의 링크를 반환합니다.
@@ -175,7 +185,7 @@ def get_top_selling_product_links(keywords) -> dict:
     keywords (List[str]): 검색할 키워드의 List
 
     Returns:
-    dict: 각 키워드에 대한 상위 3개의 판매 상품 링크
+    dict: 각 키워드에 대한 상위 판매 상품 링크
     """
     results = {}
     
@@ -194,7 +204,7 @@ def get_top_selling_product_links(keywords) -> dict:
         page.goto('https://www.taobao.com/')
 
         # TODO: 로그인 처리
-        # TODO: 현재 로그인은 처리되었다고 가정하고 진행합니다.
+        # 현재 로그인은 처리되었다고 가정하고 진행합니다.
         
         print('로그인 처리가 완료되었습니다.')
         
@@ -206,10 +216,14 @@ def get_top_selling_product_links(keywords) -> dict:
         page.wait_for_selector(search_button_selector, timeout=5000)
         print('검색 버튼이 로드되었습니다.')
         
-
-        
         def handle_response(response):
-            global simple_product_info  # 전역 변수임을 명시
+            """
+            네트워크 응답을 처리하여 제품 정보를 추출합니다.
+
+            Parameters:
+            response: Playwright 응답 객체
+            """
+            global simple_product_info
             if response.status == 200 and 'h5api.m.taobao.com/h5/mtop.relationrecommend.wirelessrecommend.recommend' in response.url:
                 simple_product_info = parse_jsonp(response.text())
         
@@ -224,8 +238,7 @@ def get_top_selling_product_links(keywords) -> dict:
         except Exception as e:
             print(f'1번째 키워드를 입력하는 도중 오류가 발생했습니다: {e}')
         
-        
-        # 첫번째 키워드 검색 결과 페이지 로드 대기
+        # 첫 번째 키워드 검색 결과 페이지 로드 대기
         with page.expect_response(
             lambda response: "h5api.m.taobao.com/h5/mtop.relationrecommend.wirelessrecommend.recommend" in response.url
         ) as response_info:
@@ -266,7 +279,7 @@ def get_top_selling_product_links(keywords) -> dict:
                 
                 time.sleep(3 + random.random() * 3)
                 
-                # 상위 3개 판매 상품 링크 선택
+                # 상위 판매 상품 링크 선택
                 top_products = sort_products_by_sales(simple_product_info)
                 results[keyword] = top_products
                 
@@ -281,10 +294,17 @@ def get_top_selling_product_links(keywords) -> dict:
 
     return results
 
-############################################
-
 def filter_high_rating_products(product_dict, min_rating=4.7):
-    
+    """
+    높은 평점을 가진 제품을 필터링합니다.
+
+    Parameters:
+    product_dict (dict): 각 카테고리의 제품 목록을 포함한 딕셔너리
+    min_rating (float): 최소 평점 기준 (기본값은 4.7)
+
+    Returns:
+    dict: 높은 평점을 가진 제품만 포함한 딕셔너리
+    """
     high_rating_products = {category: [] for category in product_dict}
     
     with sync_playwright() as playwright:
@@ -307,7 +327,7 @@ def filter_high_rating_products(product_dict, min_rating=4.7):
                 rating = None
                 for selector in rating_selectors:
                     try:
-                        page.wait_for_selector(selector, timeout=3000)  # 요소가 로딩될 때까지 최대 3초간 기다림
+                        page.wait_for_selector(selector, timeout=3000)
                         rating_element = page.query_selector(selector)
                         if rating_element:
                             rating_text = rating_element.inner_text()
@@ -328,16 +348,13 @@ def filter_high_rating_products(product_dict, min_rating=4.7):
         # 브라우저 종료
         browser.close()
         
-        # 각 카테고리별로 제품을 3개 이하로 제한합니다.
+        # 각 카테고리별로 제품을 10개 이하로 제한합니다.
         for category in high_rating_products:
             high_rating_products[category] = high_rating_products[category][:10]
     
-    
     return high_rating_products
-    
-############################################
-# 이하 코드는 테스트 코드입니다.
 
+# 이하 코드는 테스트 코드입니다.
 # keywords = [
 #     "미용실의자",
 #     "트롤리 책장",
@@ -351,9 +368,7 @@ def filter_high_rating_products(product_dict, min_rating=4.7):
 #     "고양이집"
 # ]
 
-
 # results = get_top_selling_product_links(keywords)
-
 # filtered_results = filter_high_rating_products(results)
 
 # results 딕셔너리를 JSON 파일에 저장 (테스트용)

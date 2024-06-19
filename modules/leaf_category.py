@@ -4,12 +4,14 @@ import os
 import json
 import chromadb
 import chromadb.utils.embedding_functions as embedding_functions
+import re
 
 # .env 파일을 로드합니다.
-load_dotenv()
+load_dotenv(override=True)
 
 # OpenAI API 키 설정
 openai_api_key = os.getenv('OPENAI_API_KEY')
+print('openai_api_key:', openai_api_key)
 
 def translate_with_gpt3(text):
     """
@@ -32,7 +34,7 @@ def translate_with_gpt3(text):
     )
     
     # 응답에서 JSON 형식의 문자열 추출
-    response_text = response.choices[0].message.content
+    response_text = re.search(r'\{.*?\}', response.choices[0].message.content, re.DOTALL).group(0)
     print(f'번역 결과 (JSON): {response_text}')
     
     # JSON 형식의 문자열을 파싱
@@ -56,7 +58,7 @@ def refine_product_name(product_name):
     client = OpenAI(api_key=openai_api_key)
     
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": '''You're in charge of finding categories for products in an e-commerce company, but the product names you've been given have modifiers that don't really describe the product, making it difficult to determine what the product is. You need to remove the modifiers from the product names and refine them into names that describe the essence of the product.
             Given the Korean name of the product, refine the name in the following JSON format. {“refined_product_name”: “product name that you've refined in korean”}
@@ -70,7 +72,7 @@ def refine_product_name(product_name):
     )
     
     # 응답에서 JSON 형식의 문자열 추출
-    response_text = response.choices[0].message.content
+    response_text = re.search(r'\{.*?\}', response.choices[0].message.content, re.DOTALL).group(0)
     print(f'상품명 정제 결과 (JSON): {response_text}')
     
     # JSON 형식의 문자열을 파싱
@@ -96,8 +98,15 @@ def find_nearest_categories(product_name, collection):
         query_texts=product_name,
         n_results=15
     )
+    
+    # 하나씩 출력
+    print(f"The nearest categories for '{product_name}' are:")
+    for category in results['metadatas'][:15][0]:
+        print(f"- {category['name']}")
+    
     # 가장 가까운 15개의 문서를 반환
-    return results['documents'][:15] if results['documents'] else []
+    return results['metadatas'][:15] if results['metadatas'] else []
+
 
 def select_category_with_gpt4o(product_name, nearest_categories):
     """
@@ -112,7 +121,7 @@ def select_category_with_gpt4o(product_name, nearest_categories):
     """
     
     guide = "You're an ecommerce business whose job is to determine which product category a product belongs to when given a product name. Given a product name and a set of candidate category names, you need to find the most accurate category that product name belongs to."
-    prompt = "Given the product name and the following candidate categories, determine which category the product belongs to.\n\nProduct name: " + product_name + "\n\nCandidate categories:\n" + "\n".join(nearest_categories[0]) + "\n\nWhich category does the product belong to? Respond in the following JSON format:\n\n{\n  \"category\": \"Category name\"\n}\n !IMPORT : Do not include any other text other than the category name in the JSON response."
+    prompt = "Given the product name and the following candidate categories, determine which category the product belongs to.\n\nProduct name: " + product_name + "\n\nCandidate categories:\n" + "\n".join([category["name"] for category in nearest_categories]) + "\n\nWhich category does the product belong to? Respond in the following JSON format:\n\n{\n  \"category\": \"Category name\"\n}\n"
     
     client = OpenAI(api_key=openai_api_key)
     response = client.chat.completions.create(
@@ -124,15 +133,23 @@ def select_category_with_gpt4o(product_name, nearest_categories):
     )
     
     print(response.choices[0].message.content)
-    response_text = response.choices[0].message.content.strip().strip('```json').strip('```')
+    response_text = re.search(r'\{.*?\}', response.choices[0].message.content, re.DOTALL).group(0)
     
     # JSON 형식의 문자열을 파싱
     response_json = json.loads(response_text)
     
-    category = response_json["category"]
-    print(f'카테고리: {category}')
+    category_text = response_json["category"]
+    print(f'카테고리: {category_text}')
     
-    return category
+    category_id = None
+    for category in nearest_categories:
+        if category["name"] == category_text:
+            category_id = category["category_id"]
+    
+    return {
+        "category_text" : category_text,
+        "category_id" : category_id
+    }
 
 def create_leaf_category(name):
     """
@@ -160,15 +177,13 @@ def create_leaf_category(name):
                 api_key=openai_api_key,
             )
 
-    client = chromadb.PersistentClient(path='chromadb')
+    client = chromadb.PersistentClient(path='chromadb_single_word')
 
     collection_name = 'categories'
 
     collection = client.get_or_create_collection(name=collection_name, embedding_function=openai_ef)
     
-    nearest_categories = find_nearest_categories(refined_name, collection)
-    
-    print('가장 가까운 카테고리:', nearest_categories)
+    nearest_categories = find_nearest_categories(refined_name, collection)[0]
     
     # GPT-4o가 카테고리 선택
     selected_category = select_category_with_gpt4o(refined_name, nearest_categories) 
@@ -176,5 +191,9 @@ def create_leaf_category(name):
     return {
         "name": translated_name,
         "refined_name": refined_name,
-        "leaf_category": selected_category
+        "leaf_category": selected_category["category_id"],
+        "leaf_category_text" : selected_category["category_text"],
     }
+
+# # 테스트 코드
+# print(create_leaf_category("3-4人橘色四季帐篷 210*180*135cm"))

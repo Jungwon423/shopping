@@ -5,3 +5,6 @@ __pycache__/
 instance/
 .DS_Store
 .env
+
+chromadb
+chromadb_single_word

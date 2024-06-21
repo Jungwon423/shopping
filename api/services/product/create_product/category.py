@@ -124,7 +124,7 @@ def select_category_with_gpt4o(product_name, nearest_categories):
         nearest_categories (list): 후보 카테고리 목록.
         
     Returns:
-        str: 선택된 카테고리.
+        dict: 선택된 카테고리와 그 ID를 포함한 딕셔너리.
     """
     
     guide = "You're an ecommerce business whose job is to determine which product category a product belongs to when given a product name. Given a product name and a set of candidate category names, you need to find the most accurate category that product name belongs to."
@@ -147,9 +147,7 @@ def select_category_with_gpt4o(product_name, nearest_categories):
     response_text = response_text[:end_idx+1]
     
     print(f"response_text: {response_text}")
-    # response_text = re.search(r'\{.*?\}', response.choices[0].message.content, re.DOTALL).group(0)
-    
-    # JSON 형식의 문자열을 파싱
+    # JSON 형식의 문자열 파싱
     response_json = json.loads(response_text)
     
     category_text = response_json["category"]
@@ -191,10 +189,7 @@ def create_leaf_category(name):
                 api_key=openai_api_key,
             )
 
-    # client = chromadb.PersistentClient(path='chromadb_single_word')
-    # client = chromadb.PersistentClient(path='chromadb')
     client = chromadb.PersistentClient(path='chromadb_last_two_words')
-
     collection_name = 'categories'
 
     collection = client.get_or_create_collection(name=collection_name, embedding_function=openai_ef)

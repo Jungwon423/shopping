@@ -17,6 +17,15 @@ product_collection = db["products"]
 refined_product_collection = db["refined_products"]
 
 def extract_product_info(product_id=None):
+    """
+    MongoDB에서 제품 정보를 추출하여 JSON 형식으로 반환합니다.
+
+    Args:
+        product_id (str, optional): 특정 제품의 ID. 기본값은 None.
+
+    Returns:
+        dict: 추출된 제품 정보.
+    """
     documents = product_collection.find()
     
     document = documents[1]
@@ -47,7 +56,15 @@ def extract_product_info(product_id=None):
     return product_info
 
 def refine_product_info(product_info):
-    
+    """
+    추출된 제품 정보를 정제하여 네이버 스마트스토어 API 형식에 맞는 데이터를 생성합니다.
+
+    Args:
+        product_info (dict): 추출된 제품 정보.
+
+    Returns:
+        dict: 정제된 제품 정보.
+    """
     # leaf category & name 생성
     leaf_category_and_name = create_leaf_category(product_info['product_name'])
     detail_content = create_detail_content_payload(product_info['detail_image_urls'])
@@ -84,9 +101,16 @@ def refine_product_info(product_info):
         "sellerTags": create_seller_tag(product_info['product_name'])
     }
 
-
 def create_product_payload(product):
-    
+    """
+    정제된 제품 정보를 기반으로 네이버 스마트스토어 API에 맞는 페이로드를 생성합니다.
+
+    Args:
+        product (dict): 정제된 제품 정보.
+
+    Returns:
+        dict: 네이버 스마트스토어 API에 맞는 페이로드.
+    """
     payload = {
         "originProduct" : {
             "statusType" : "SALE",
@@ -152,8 +176,6 @@ def create_product_payload(product):
     return payload
 
 def send_product_info_request(payload, client_id="3CCF8wa60QZFqM40L9KTme", client_secret="$2a$04$t58Bu4kYetpNCt7Cf7fQHO"):
-    access_token = get_access_token(client_id, client_secret)
-
     """
     주어진 페이로드를 사용하여 Naver API에 POST 요청을 보냅니다.
 
@@ -165,6 +187,8 @@ def send_product_info_request(payload, client_id="3CCF8wa60QZFqM40L9KTme", clien
     Returns:
         str: 응답 데이터의 디코딩된 문자열.
     """
+    access_token = get_access_token(client_id, client_secret)
+
     url = "https://api.commerce.naver.com/external/v2/products"
     headers = {
         'Authorization': f"Bearer {access_token}",
@@ -176,3 +200,10 @@ def send_product_info_request(payload, client_id="3CCF8wa60QZFqM40L9KTme", clien
     print(response.text)
 
     return response.text
+
+# 테스트 코드
+
+product_info = extract_product_info()
+refined_product_info = refine_product_info(product_info)
+payload = create_product_payload(refined_product_info)
+response = send_product_info_request(payload)

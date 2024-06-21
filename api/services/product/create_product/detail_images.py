@@ -1,6 +1,15 @@
 from api.utils.ensure_https import ensure_https
 
 def extract_image_links_from_html(html):
+    """
+    HTML 텍스트에서 이미지 링크를 추출합니다.
+
+    Args:
+        html (str): 이미지 링크를 추출할 HTML 텍스트.
+
+    Returns:
+        list: 추출된 이미지 링크 리스트.
+    """
     image_links = []
     start = 0
 
@@ -12,13 +21,13 @@ def extract_image_links_from_html(html):
 
         # src 속성 찾기
         src_start = html.find('src="', img_tag_start)
-        if src_start == -1:
+        if (src_start == -1):
             break
         src_start += len('src="')
 
         # src 속성 값의 끝 찾기
         src_end = html.find('"', src_start)
-        if src_end == -1:
+        if (src_end == -1):
             break
 
         # src 값 추출
@@ -31,6 +40,15 @@ def extract_image_links_from_html(html):
     return image_links
 
 def extract_image_links(dict):
+    """
+    주어진 딕셔너리에서 이미지 링크를 추출합니다.
+    
+    Args:
+        dict (dict): 이미지 링크를 포함한 딕셔너리.
+        
+    Returns:
+        list: 추출된 이미지 링크 리스트.
+    """
     if 'desc_richtext_pc' in dict:
         return extract_image_links_from_html(dict['desc_richtext_pc']['model']['text'])
     else:

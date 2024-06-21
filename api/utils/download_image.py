@@ -15,9 +15,13 @@ def download_image(image_url: str) -> bytes:
     }
     
     try:
+        # 이미지 URL에서 GET 요청을 통해 이미지를 다운로드
         response = requests.get(image_url, headers=headers, timeout=10)
+        # 응답 상태 코드가 200(성공)이 아닌 경우 예외 발생
         response.raise_for_status()
+        # 성공적으로 다운로드된 이미지의 바이트 데이터를 반환
         return response.content
     except requests.RequestException as e:
+        # 다운로드 중 오류가 발생하면 오류 메시지를 출력하고 None을 반환
         print(f'Error downloading image: {e}')
         return None

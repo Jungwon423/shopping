@@ -11,6 +11,15 @@ load_dotenv(override=True)
 openai_api_key = os.getenv('OPENAI_API_KEY')
 
 def create_seller_tag(product_name):
+    """
+    주어진 제품명을 기반으로 한국에서 검색할 가능성이 있는 키워드를 생성합니다.
+
+    Args:
+        product_name (str): 키워드를 생성할 제품명.
+
+    Returns:
+        list: 생성된 키워드를 포함한 딕셔너리 리스트.
+    """
     client = OpenAI(api_key=openai_api_key)
     
     response = client.chat.completions.create(
@@ -37,4 +46,5 @@ def create_seller_tag(product_name):
     generated_keywords = response_json["keywords"]
     print(f'생성된 키워드: {generated_keywords}')
     
+    # 키워드를 딕셔너리 형태로 변환하여 반환 (최대 10개)
     return [{"text": text} for text in generated_keywords][:10]

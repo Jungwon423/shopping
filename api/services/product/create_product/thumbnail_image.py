@@ -8,12 +8,13 @@ def create_image_payload(image_urls):
     Returns:
         dict: 네이버 API 형식에 맞는 이미지 페이로드 딕셔너리.
     """
+    # 대표 이미지를 첫 번째 이미지로 설정하고, 나머지 이미지를 선택 이미지로 설정
     payload = {
-            "representativeImage": {
-                "url": image_urls[0]
-            },
-            "optionalImages": [
-                {"url": url} for url in image_urls[1:]
-            ]
+        "representativeImage": {
+            "url": image_urls[0]
+        },
+        "optionalImages": [
+            {"url": url} for url in image_urls[1:]
+        ]
     }
     return payload

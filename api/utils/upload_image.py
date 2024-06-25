@@ -19,7 +19,6 @@ def upload_image_to_naver(image_urls: List[str], client_id="3CCF8wa60QZFqM40L9KT
     """
     # Naver API 액세스 토큰 가져오기
     access_token = get_access_token(client_id, client_secret)
-    print(f"Access Token: {access_token[:10]}...")  # 토큰의 처음 10자만 출력
     
     url = "https://api.commerce.naver.com/external/v1/product-images/upload"
     headers = {
@@ -42,10 +41,10 @@ def upload_image_to_naver(image_urls: List[str], client_id="3CCF8wa60QZFqM40L9KT
         
         # 준비된 파일이 있는 경우 업로드
         if files:
-            print(f"Uploading batch {i//batch_size + 1} with {len(files)} images")
+            # print(f"Uploading batch {i//batch_size + 1} with {len(files)} images")
             response = requests.post(url, headers=headers, files=files)
-            print(f"Response for batch {i//batch_size + 1}: {response.status_code}")
-            print(response.text[:500] + "...")  # 응답의 처음 500자만 출력
+            # print(f"Response for batch {i//batch_size + 1}: {response.status_code}")
+            # print(response.text[:500] + "...")  # 응답의 처음 500자만 출력
             
             # 응답이 성공적인 경우 업로드된 이미지 URL 추출
             if response.status_code == 200:

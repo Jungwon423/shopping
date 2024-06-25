@@ -38,7 +38,6 @@ def create_seller_tag(product_name):
     
     # 응답에서 JSON 형식의 문자열 추출
     response_text = re.search(r'\{.*?\}', response.choices[0].message.content, re.DOTALL).group(0)
-    print(f'번역 결과 (JSON): {response_text}')
     
     # JSON 형식의 문자열을 파싱
     response_json = json.loads(response_text)

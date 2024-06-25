@@ -72,7 +72,6 @@ def refine_product_name(product_name):
     
     # 응답에서 JSON 형식의 문자열 추출
     response_text = re.search(r'\{.*?\}', response.choices[0].message.content, re.DOTALL).group(0)
-    print(f'상품명 정제 결과 (JSON): {response_text}')
     
     # JSON 형식의 문자열을 파싱
     response_json = json.loads(response_text)
@@ -95,22 +94,22 @@ def find_nearest_categories(product_name, collection):
     """
     results = collection.query(
         query_texts=product_name,
-        n_results=5000
+        n_results=15
     )
     
-    find_str = "안마의자"
-    find_idx = -1
+    # find_str = "안마의자"
+    # find_idx = -1
     
-    # 하나씩 출력
-    print(f"The nearest categories for '{product_name}' are:")
-    for idx, category in enumerate(results['metadatas'][0][:]):
-        if idx < 10:
-            print(f"- {category['name']}")
-        if find_str in category['name']:
-            find_idx = idx
-            break
+    # # 하나씩 출력
+    # print(f"The nearest categories for '{product_name}' are:")
+    # for idx, category in enumerate(results['metadatas'][0][:]):
+    #     if idx < 10:
+    #         print(f"- {category['name']}")
+    #     if find_str in category['name']:
+    #         find_idx = idx
+    #         break
         
-    print(f"find_idx: {find_idx}")
+    # print(f"find_idx: {find_idx}")
     
     # 가장 가까운 15개의 문서를 반환
     return results['metadatas'][0][:15] if results['metadatas'] else []
@@ -139,14 +138,12 @@ def select_category_with_gpt4o(product_name, nearest_categories):
         ]
     )
     
-    print(response.choices[0].message.content)
     response_text = response.choices[0].message.content
     start_idx = response_text.find("{")
     response_text = response_text[start_idx:]
     end_idx = response_text.find("}")
     response_text = response_text[:end_idx+1]
     
-    print(f"response_text: {response_text}")
     # JSON 형식의 문자열 파싱
     response_json = json.loads(response_text)
     

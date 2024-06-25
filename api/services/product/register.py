@@ -1,4 +1,5 @@
 import json
+from bson import ObjectId
 from pymongo import MongoClient
 import requests
 
@@ -8,13 +9,13 @@ from api.services.product.create_product.thumbnail_image import create_image_pay
 from api.utils.naver_oauth import get_access_token
 from api.utils.upload_image import upload_image_to_naver
 from api.services.product.create_product.detail_images import create_detail_content_payload, extract_image_links
-from api.services.product.create_product.options import parse_sku_data_to_options_and_get_lowest
+from api.services.product.create_product.options import parse_sku_data_to_options_and_get_lowest, process_product_options
 
 # MongoDB 클라이언트 설정
 client = MongoClient("mongodb://localhost:27017/")
 db = client["SmartStore"]
-product_collection = db["products"]
-refined_product_collection = db["refined_products"]
+product_collection = db["products_raw_data"]
+processed_product_collection = db["products_processed_data"]
 
 def extract_product_info(product_id=None):
     """
@@ -26,9 +27,13 @@ def extract_product_info(product_id=None):
     Returns:
         dict: 추출된 제품 정보.
     """
-    documents = product_collection.find()
     
-    document = documents[1]
+    if product_id is None:
+        documents = product_collection.find()
+        document = documents[0]
+        
+    # 특정 product_id로 문서 조회
+    document = product_collection.find_one({'_id': ObjectId(product_id)})
     
     product_info_json = document['product_info']['data']
     product_description_json = document['product_detail']['data']
@@ -37,7 +42,7 @@ def extract_product_info(product_id=None):
     product_id = product_info_json['item']['itemId']
     product_name = product_info_json['item']['title']
     thumbnail_urls = upload_image_to_naver(product_info_json['item']['images'])
-    product_option = parse_sku_data_to_options_and_get_lowest(product_info_json)
+    product_option = process_product_options(parse_sku_data_to_options_and_get_lowest(product_info_json))
     product_properties = product_info_json['componentsVO']['extensionInfoVO']['infos']
     detail_image_urls = extract_image_links(product_description_json['components']['componentData'])
     
@@ -51,11 +56,11 @@ def extract_product_info(product_id=None):
         "detail_image_urls": detail_image_urls
     }
     
-    print(json.dumps(product_info, indent=4, ensure_ascii=False))
+    # print(json.dumps(product_info, indent=4, ensure_ascii=False))
     
     return product_info
 
-def refine_product_info(product_info):
+def process_product_info(product_info):
     """
     추출된 제품 정보를 정제하여 네이버 스마트스토어 API 형식에 맞는 데이터를 생성합니다.
 
@@ -98,7 +103,7 @@ def refine_product_info(product_info):
                 }
 
         },
-        "sellerTags": create_seller_tag(product_info['product_name'])
+        "sellerTags": create_seller_tag(leaf_category_and_name['name'])
     }
 
 def create_product_payload(product):
@@ -175,6 +180,25 @@ def create_product_payload(product):
     
     return payload
 
+def save_payload_to_db(product_id, payload):
+    """
+    생성된 페이로드를 MongoDB의 processed_product_collection에 저장합니다.
+
+    Args:
+        product_id (str): 제품 ID.
+        payload (dict): 생성된 페이로드.
+    """
+    # MongoDB에 저장할 문서 생성
+    document = {
+        "product_id": product_id,
+        "payload": payload
+    }
+    
+    # MongoDB에 저장
+    result = processed_product_collection.insert_one(document)
+    
+    print(f"Payload saved to MongoDB with ID: {result.inserted_id}")
+
 def send_product_info_request(payload, client_id="3CCF8wa60QZFqM40L9KTme", client_secret="$2a$04$t58Bu4kYetpNCt7Cf7fQHO"):
     """
     주어진 페이로드를 사용하여 Naver API에 POST 요청을 보냅니다.
@@ -200,10 +224,3 @@ def send_product_info_request(payload, client_id="3CCF8wa60QZFqM40L9KTme", clien
     print(response.text)
 
     return response.text
-
-# 테스트 코드
-
-product_info = extract_product_info()
-refined_product_info = refine_product_info(product_info)
-payload = create_product_payload(refined_product_info)
-response = send_product_info_request(payload)

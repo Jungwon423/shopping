@@ -46,7 +46,7 @@ def get_access_token(clientId, clientSecret):
         "type": "SELF",
     }
 
-    print(json.dumps(data, indent=4))
+    # print(json.dumps(data, indent=4))
 
     # POST 요청을 통해 액세스 토큰 요청
     response = requests.post(url, data=data)

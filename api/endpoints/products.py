@@ -2,7 +2,8 @@ from flask import request
 from flask_restx import Namespace, Resource, fields
 from bson import ObjectId
 from datetime import datetime
-from api.services.product.register import (
+from api.services.product.get_producit_info import format_product_data
+from api.services.product.upload import (
     extract_product_info,
     process_product_info,
     create_product_payload,
@@ -14,7 +15,8 @@ from api.services.product.register import (
 from pymongo import MongoClient
 client = MongoClient('mongodb://localhost:27017/')
 db = client['SmartStore']
-products_collection = db['products_raw_data']
+raw_product_collection = db['products_raw_data']
+processed_product_collection = db['products_processed_data']
 
 # Namespace 생성
 product_ns = Namespace('products', description='상품 관련 작업')
@@ -39,18 +41,28 @@ class ProcessProduct(Resource):
             'url': data['url'],
             'keyword': data.get('keyword'),
             # 추가 필드
-            'created_at': datetime.utcnow(),
-            'updated_at': datetime.utcnow()
+            'created_at': datetime.now(),
+            'updated_at': datetime.now()
         }
-        result = products_collection.insert_one(product)
+        result = raw_product_collection.insert_one(product)
         # 여기에 비동기 처리 로직 추가 (예: Celery 태스크 호출)
-        product_info = extract_product_info(product_id=str(result.inserted_id))
+        product_info = extract_product_info(id=str(result.inserted_id))
         processed_product_info = process_product_info(product_info)
         product_payload = create_product_payload(processed_product_info)
         # 페이로드를 MongoDB에 저장
-        save_payload_to_db("example_product_id", product_payload)
+        save_payload_to_db(product_payload)
         
         return {'message': '처리가 시작되었습니다', 'product_id': str(result.inserted_id)}, 202
+
+@product_ns.route('/<string:product_id>')
+class Product(Resource):
+    @product_ns.doc(description='상품 정보 조회')
+    def get(self, product_id):
+        product = processed_product_collection.find_one({'_id': ObjectId(product_id)}, {'_id': 0})
+        if product:
+            formatted_product = format_product_data([product])[0]
+            return {'product': formatted_product}, 200
+        return {'message': '상품을 찾을 수 없습니다'}, 404
 
 @product_ns.route('/update/<string:product_id>')
 class UpdateProduct(Resource):
@@ -58,7 +70,7 @@ class UpdateProduct(Resource):
     @product_ns.doc(description='처리된 상품 정보 업데이트')
     def put(self, product_id):
         data = request.json
-        result = products_collection.update_one(
+        result = raw_product_collection.update_one(
             {'_id': ObjectId(product_id)},
             {'$set': {
                 'data': data['data'],
@@ -73,7 +85,7 @@ class UpdateProduct(Resource):
 class UploadProduct(Resource):
     @product_ns.doc(description='상품 업로드 요청')
     def post(self, product_id):
-        result = products_collection.update_one(
+        result = raw_product_collection.update_one(
             {'_id': ObjectId(product_id)},
             {'$set': {
                 'status': 'uploading',
@@ -94,12 +106,14 @@ class ProcessedProducts(Resource):
         per_page = int(request.args.get('per_page', 10))
         
         skip = (page - 1) * per_page
-        products = list(products_collection.find(
-            {'status': 'processed'},
-            {'_id': 0}  # _id 필드 제외
+        products = list(processed_product_collection.find(
+            # {'status': 'processed'},
+            # {'_id': 0}  # _id 필드 제외
         ).skip(skip).limit(per_page))
         
-        return {'products': products, 'page': page, 'per_page': per_page}, 200
+        formatted_products = format_product_data(products)
+        
+        return {'products': formatted_products, 'page': page, 'per_page': per_page}, 200
 
 @product_ns.route('/uploaded')
 class UploadedProducts(Resource):
@@ -110,7 +124,7 @@ class UploadedProducts(Resource):
         per_page = int(request.args.get('per_page', 10))
         
         skip = (page - 1) * per_page
-        products = list(products_collection.find(
+        products = list(processed_product_collection.find(
             {'status': 'uploaded'},
             {'_id': 0}  # _id 필드 제외
         ).skip(skip).limit(per_page))

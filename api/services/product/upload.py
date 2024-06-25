@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 from bson import ObjectId
 from pymongo import MongoClient
@@ -14,10 +15,10 @@ from api.services.product.create_product.options import parse_sku_data_to_option
 # MongoDB 클라이언트 설정
 client = MongoClient("mongodb://localhost:27017/")
 db = client["SmartStore"]
-product_collection = db["products_raw_data"]
+raw_product_collection = db["products_raw_data"]
 processed_product_collection = db["products_processed_data"]
 
-def extract_product_info(product_id=None):
+def extract_product_info(id=None):
     """
     MongoDB에서 제품 정보를 추출하여 JSON 형식으로 반환합니다.
 
@@ -28,13 +29,14 @@ def extract_product_info(product_id=None):
         dict: 추출된 제품 정보.
     """
     
-    if product_id is None:
-        documents = product_collection.find()
+    if id is None:
+        documents = raw_product_collection.find()
         document = documents[0]
         
     # 특정 product_id로 문서 조회
-    document = product_collection.find_one({'_id': ObjectId(product_id)})
+    document = raw_product_collection.find_one({'_id': ObjectId(id)})
     
+    # 상품 정보 추출    
     product_info_json = document['product_info']['data']
     product_description_json = document['product_detail']['data']
     
@@ -55,6 +57,14 @@ def extract_product_info(product_id=None):
         "product_properties": product_properties,
         "detail_image_urls": detail_image_urls
     }
+    
+    # product_id만 추출 후 processed_product_collection에 저장
+    processed_product_collection.insert_one({
+        'product_id': product_id,
+        'status': 'processing',
+        'created_at': datetime.now(),
+        'updated_at': datetime.now(),
+    })
     
     # print(json.dumps(product_info, indent=4, ensure_ascii=False))
     
@@ -82,6 +92,9 @@ def process_product_info(product_info):
         "images": images,
         "salePrice": product_info['product_options']['price'],
         "stockQuantity": product_info['product_options']['stockQuantity'],
+        "sellerCodeInfo": {
+            "sellerManagementCode": product_info['product_id'],
+        },
         "optionInfo": {
             "optionCombinationGroupNames": product_info['product_options']['optionCombinationGroupNames'],
             "optionCombinations": product_info['product_options']['optionCombinations'],
@@ -135,7 +148,7 @@ def create_product_payload(product):
                     "deliveryAreaType" : {
                         "deliveryAreaType" : "AREA_3",
                         "area2extraFee" : 5000,
-                        "area3extraFee" : 5000 # TODO: 내가 놓쳤던 부분 --> 다시 확인
+                        "area3extraFee" : 5000
                     }
                 },
                 "claimDeliveryInfo" : {
@@ -153,12 +166,10 @@ def create_product_payload(product):
                 "originAreaInfo" : {
                     "originAreaCode": "0200037",
                     "importer": "수입산",
-                    "content": "중국산(수입산)", # TODO: 필수 아닌데 넣은 이유?
+                    "content": "중국산(수입산)",
                 },
-                "sellerCodeInfo": {
-                    "sellerManagementCode": "226502934", # TODO: 판매자 코드 어떤 값?
-                },
-                "optionInfo" : product["optionInfo"], # TODO: "useStockManagement": True 까먹지 말기
+                "sellerCodeInfo": product["sellerCodeInfo"],
+                "optionInfo" : product["optionInfo"],
                 "certificationTargetExcludeContent" : {
                     "kcExemptionType": "OVERSEAS",
                     "kcCertifiedProductExclusionYn": "KC_EXEMPTION_OBJECT",
@@ -180,7 +191,7 @@ def create_product_payload(product):
     
     return payload
 
-def save_payload_to_db(product_id, payload):
+def save_payload_to_db(payload):
     """
     생성된 페이로드를 MongoDB의 processed_product_collection에 저장합니다.
 
@@ -188,16 +199,18 @@ def save_payload_to_db(product_id, payload):
         product_id (str): 제품 ID.
         payload (dict): 생성된 페이로드.
     """
-    # MongoDB에 저장할 문서 생성
-    document = {
-        "product_id": product_id,
-        "payload": payload
-    }
+    product_id = payload['originProduct']['detailAttribute']['sellerCodeInfo']['sellerManagementCode']
     
-    # MongoDB에 저장
-    result = processed_product_collection.insert_one(document)
-    
-    print(f"Payload saved to MongoDB with ID: {result.inserted_id}")
+    # MongoDB에서 product_id로 문서 조회 후 업데이트
+    processed_product_collection.update_one(
+        {'product_id': product_id},
+        {'$set': {
+            'payload': payload,
+            'status': 'processed',
+            'updated_at': datetime.now(),
+            }
+        }
+    )
 
 def send_product_info_request(payload, client_id="3CCF8wa60QZFqM40L9KTme", client_secret="$2a$04$t58Bu4kYetpNCt7Cf7fQHO"):
     """
